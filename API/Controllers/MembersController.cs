@@ -5,9 +5,8 @@ using API.Entities;
 
 namespace API.Controllers
 {
-    [Route("api/[controller]")] // localhost:5001/api/members
-    [ApiController]
-    public class MembersController : ControllerBase
+
+    public class MembersController : BaseApiController
     {
         private readonly AppDbContext _context;
 
