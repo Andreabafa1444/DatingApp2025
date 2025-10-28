@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Authorization;
 namespace API.Controllers
 {
 [Authorize]
+//[AllowAnonymous]  // para pruebas pequeñas 
 
 public class MembersController(AppDbContext context) : BaseApiController
 {
