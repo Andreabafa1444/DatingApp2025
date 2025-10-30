@@ -2,7 +2,7 @@ name: Test ASP.NET API with Authentication
 
 on:
   push:
-    branches: [ parcial02 ]
+    branches: [ Parcial01-Dante, parcial02 ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -21,10 +21,10 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore DatingApp.sln
+        run: dotnet restore DatingAPP.sln
 
       - name: Build project
-        run: dotnet build API --no-restore --configuration Release
+        run: dotnet build DatingAPP.sln --no-restore --configuration Release
 
       - name: Apply EF Core migrations
         run: |
@@ -194,5 +194,3 @@ jobs:
           if [ -f API/api.pid ]; then
             kill $(cat API/api.pid) || true
           fi
-
-        
