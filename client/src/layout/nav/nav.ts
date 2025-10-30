@@ -4,8 +4,7 @@ import { AccountService } from '../../core/services/account-service';
 
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
-
-
+import { ToastService } from '../../core/services/toast-service';
 
 
 @Component({
@@ -16,9 +15,8 @@ import { Router, RouterLink, RouterLinkActive } from '@angular/router';
 })
 export class Nav {
   protected accountService = inject(AccountService);
-
-
   protected creds: any = {};
+    private toast = inject(ToastService);
     private router = inject(Router);
   login(): void {
     this.accountService.login(this.creds).subscribe(
@@ -28,8 +26,9 @@ export class Nav {
           this.creds = {};
           
         },
-        error: error => alert(error.message)
-      }
+      error: error =>
+        this.toast.error("Login failed: " + error.message)
+    }
     );
   }
   logout(): void {
