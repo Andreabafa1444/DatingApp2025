@@ -1,0 +1,50 @@
+name: Test ASP.NET API with curl
+
+on:
+  push:
+    branches: [ Parcial01-Dante ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-api:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '9.0.x'  # o 8.0 si usas esa versión
+
+      - name: Restore dependencies
+        run: dotnet restore DatingApp.sln
+
+      - name: Build project
+        run: dotnet build API --no-restore --configuration Release
+
+      - name: Apply EF Core migrations
+        run: |
+          cd API
+          dotnet tool install --global dotnet-ef
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet ef database update
+          cd ..
+
+      - name: Run API in background
+        run: |
+          dotnet run --project API --urls "http://localhost:5001" &
+          sleep 8
+
+      - name: Test API endpoints with curl
+        run: |
+          echo "Checking /api/members"
+          curl -f http://localhost:5001/api/members || exit 1
+
+          echo "Checking /api/users"
+          curl -f http://localhost:5001/api/users || exit 1
+
+          echo "✅ All endpoints responded successfully!"
