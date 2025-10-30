@@ -1,61 +1,78 @@
 using System.Security.Cryptography;
+using System.Text;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using API.Data;
 using API.DTOs;
 using API.Entities;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
-using System.Text;
 using API.Interfaces;
 using API.Extensions;
 
-namespace API.Controllers;
-
-public class AccountController(AppDbContext context, ITokenService tokenService) : BaseApiController
-
+namespace API.Controllers
 {
-    [HttpPost("register")]
-
-    public async Task<ActionResult<UserResponse>> Register(RegisterRequest request)
+    [AllowAnonymous]
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AccountController : ControllerBase
     {
-        if (await EmailExists(request.Email)) return BadRequest("Email is already taken");
+        private readonly AppDbContext _context;
+        private readonly ITokenService _tokenService;
 
-        using var hmac = new HMACSHA512();
-
-        var user = new AppUser
+        public AccountController(AppDbContext context, ITokenService tokenService)
         {
-            DisplayName = request.DisplayName,
-            Email = request.Email,
-            PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(request.Password)),
-            PasswordSalt = hmac.Key
-        };
-
-        context.Users.Add(user);
-        await context.SaveChangesAsync();
-
-                 return user.ToDto(tokenService);
-
-
-    }
-  [HttpPost("login")]
-    public async Task<ActionResult<UserResponse>> Login(LoginRequest request)
-    {
-        var user = await context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
-        if (user == null) return Unauthorized("Invalid email or password ");
-
-        using var hmac = new HMACSHA512(user.PasswordSalt);
-
-        var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(request.Password));
-
-        for (var i = 0; i < computedHash.Length; i++)
-        {
-            if (computedHash[i] != user.PasswordHash[i]) return Unauthorized("Invalid email or password ");
+            _context = context;
+            _tokenService = tokenService;
         }
-        return user.ToDto(tokenService); 
-    }
-    //Validacion de emails duplicados
-    private async Task<bool> EmailExists(string email)
-    {
-        return await context.Users.AnyAsync(u => u.Email.ToLower() == email.ToLower());
-    }
 
+        // 📩 Registrar usuario
+        [HttpPost("register")]
+        public async Task<ActionResult<UserResponse>> Register(RegisterRequest request)
+        {
+            if (await EmailExists(request.Email))
+                return BadRequest("Email is already taken");
+
+            using var hmac = new HMACSHA512();
+
+            var user = new AppUser
+            {
+                DisplayName = request.DisplayName,
+                Email = request.Email,
+                PasswordHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(request.Password)),
+                PasswordSalt = hmac.Key
+            };
+
+            _context.Users.Add(user);
+            await _context.SaveChangesAsync();
+
+            // Devuelve DTO con el token incluido
+            return user.ToDto(_tokenService);
+        }
+
+       // 🔐 Iniciar sesión
+[HttpPost("login")]
+public async Task<ActionResult<UserResponse>> Login(LoginRequest request)
+{
+    var user = await _context.Users.SingleOrDefaultAsync(u => u.Email == request.Email);
+    if (user == null) return Unauthorized("Invalid email or password");
+
+    if (user.PasswordSalt == null || user.PasswordHash == null)
+        return Unauthorized("Invalid email or password");
+
+    using var hmac = new HMACSHA512(user.PasswordSalt);
+    var computedHash = hmac.ComputeHash(Encoding.UTF8.GetBytes(request.Password));
+
+    // Comparación segura usando SequenceEqual
+    if (!computedHash.SequenceEqual(user.PasswordHash))
+        return Unauthorized("Invalid email or password");
+
+    return user.ToDto(_tokenService);
+}
+
+        // 🔎 Validar si el correo ya existe
+        private async Task<bool> EmailExists(string email)
+        {
+            return await _context.Users.AnyAsync(u => u.Email.ToLower() == email.ToLower());
+        }
+    }
 }

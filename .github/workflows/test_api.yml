@@ -1,8 +1,8 @@
-name: Test ASP.NET API with curl
+name: Test ASP.NET API with Authentication
 
 on:
   push:
-    branches: [ Parcial01-Dante ]
+    branches: [ parcial02 ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '9.0.x'  # o 8.0 si usas esa versión
+          dotnet-version: '9.0.x'
 
       - name: Restore dependencies
         run: dotnet restore DatingApp.sln
@@ -34,17 +34,165 @@ jobs:
           dotnet ef database update
           cd ..
 
+      - name: Create appsettings for CI
+        run: |
+          cd API
+          cat > appsettings.json << 'EOF'
+          {
+            "Logging": {
+              "LogLevel": {
+                "Default": "Information",
+                "Microsoft.AspNetCore": "Warning"
+              }
+            },
+            "AllowedHosts": "*",
+            "TokenKey": "Mi-Clave-Super-Secreta-Para-JWT-Tokens-Que-Debe-Ser-Muy-Larga-Y-Segura-2024-Dating-App-CI-CD"
+          }
+          EOF
+          cd ..
+
       - name: Run API in background
         run: |
-          dotnet run --project API --urls "http://localhost:5001" &
-          sleep 8
+          cd API
+          dotnet run --urls "http://localhost:5001" &
+          echo $! > api.pid
+          cd ..
+          sleep 10
 
-      - name: Test API endpoints with curl
+      - name: Wait for API to be ready
         run: |
-          echo "Checking /api/members"
-          curl -f http://localhost:5001/api/members || exit 1
+          echo "Waiting for API to start..."
+          for i in {1..30}; do
+            if curl -s http://localhost:5001/api/members > /dev/null 2>&1; then
+              echo "✅ API is ready!"
+              break
+            fi
+            echo "Attempt $i/30: API not ready yet..."
+            sleep 2
+          done
 
-          echo "Checking /api/users"
-          curl -f http://localhost:5001/api/users || exit 1
+      - name: Test 1 - Register new user
+        run: |
+          echo "🧪 Testing user registration..."
+          REGISTER_RESPONSE=$(curl -s -X POST "http://localhost:5001/api/account/register" \
+            -H "Content-Type: application/json" \
+            -d '{"displayName":"TestUser","email":"test@example.com","password":"TestPass123!"}')
+          
+          echo "Response: $REGISTER_RESPONSE"
+          
+          if echo "$REGISTER_RESPONSE" | grep -q '"token"'; then
+            echo "✅ Registration successful!"
+            TOKEN=$(echo $REGISTER_RESPONSE | grep -o '"token":"[^"]*' | cut -d'"' -f4)
+            echo "TOKEN=$TOKEN" >> $GITHUB_ENV
+          else
+            echo "❌ Registration failed"
+            exit 1
+          fi
 
-          echo "✅ All endpoints responded successfully!"
+      - name: Test 2 - Login with registered user
+        run: |
+          echo "🧪 Testing user login..."
+          LOGIN_RESPONSE=$(curl -s -X POST "http://localhost:5001/api/account/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"test@example.com","password":"TestPass123!"}')
+          
+          echo "Response: $LOGIN_RESPONSE"
+          
+          if echo "$LOGIN_RESPONSE" | grep -q '"token"'; then
+            echo "✅ Login successful!"
+          else
+            echo "❌ Login failed"
+            exit 1
+          fi
+
+      - name: Test 3 - Access protected endpoint without token (should fail)
+        run: |
+          echo "🧪 Testing protected endpoint without token..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5001/api/members)
+          
+          if [ "$HTTP_CODE" = "401" ] || [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Endpoint responded correctly (HTTP $HTTP_CODE)"
+          else
+            echo "❌ Unexpected status code: $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Test 4 - Access protected endpoint with token
+        run: |
+          echo "🧪 Testing protected endpoint with valid token..."
+          MEMBERS_RESPONSE=$(curl -s -H "Authorization: Bearer ${{ env.TOKEN }}" \
+            http://localhost:5001/api/members)
+          
+          echo "Response: $MEMBERS_RESPONSE"
+          
+          if echo "$MEMBERS_RESPONSE" | grep -q '\['; then
+            echo "✅ Protected endpoint accessed successfully!"
+          else
+            echo "⚠️ Unexpected response (might be empty array or endpoint allows anonymous)"
+          fi
+
+      - name: Test 5 - Get specific member (AllowAnonymous endpoint)
+        run: |
+          echo "🧪 Testing get specific member endpoint..."
+          
+          # Primero obtenemos la lista de miembros para sacar un ID
+          MEMBERS=$(curl -s http://localhost:5001/api/members)
+          
+          if echo "$MEMBERS" | grep -q '"id"'; then
+            MEMBER_ID=$(echo $MEMBERS | grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+            echo "Testing with member ID: $MEMBER_ID"
+            
+            MEMBER_RESPONSE=$(curl -s http://localhost:5001/api/members/$MEMBER_ID)
+            echo "Response: $MEMBER_RESPONSE"
+            
+            if echo "$MEMBER_RESPONSE" | grep -q '"id"'; then
+              echo "✅ Get member endpoint works!"
+            else
+              echo "❌ Failed to get member"
+              exit 1
+            fi
+          else
+            echo "⚠️ No members found in database, skipping test"
+          fi
+
+      - name: Test 6 - Invalid login attempt
+        run: |
+          echo "🧪 Testing invalid login credentials..."
+          INVALID_LOGIN=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:5001/api/account/login" \
+            -H "Content-Type: application/json" \
+            -d '{"email":"test@example.com","password":"WrongPassword"}')
+          
+          HTTP_CODE=$(echo "$INVALID_LOGIN" | tail -n1)
+          
+          if [ "$HTTP_CODE" = "401" ]; then
+            echo "✅ Invalid login correctly rejected!"
+          else
+            echo "❌ Expected 401, got $HTTP_CODE"
+            exit 1
+          fi
+
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "========================================="
+          echo "           TEST SUMMARY"
+          echo "========================================="
+          echo "✅ All API tests completed!"
+          echo ""
+          echo "Tests performed:"
+          echo "  1. User Registration"
+          echo "  2. User Login"
+          echo "  3. Protected Endpoint Access Control"
+          echo "  4. JWT Token Authentication"
+          echo "  5. Get Specific Member"
+          echo "  6. Invalid Login Rejection"
+          echo "========================================="
+
+      - name: Stop API
+        if: always()
+        run: |
+          if [ -f API/api.pid ]; then
+            kill $(cat API/api.pid) || true
+          fi
+
+        

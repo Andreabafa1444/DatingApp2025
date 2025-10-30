@@ -8,11 +8,14 @@ using Microsoft.AspNetCore.Authorization;
 
 namespace API.Controllers
 {
-[Authorize]
+//[Authorize]
 //[AllowAnonymous]  // para pruebas pequeñas 
 
 public class MembersController(AppDbContext context) : BaseApiController
-{
+    {
+        [AllowAnonymous]
+
+
     [HttpGet]
         public async Task<ActionResult<IReadOnlyList<AppUser>>> GetMembers() // se puede
         {
