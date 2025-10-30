@@ -13,8 +13,8 @@ export class Home {
 
   protected registerMode = signal(false);
 
-  showRegister(): void{
-    this.registerMode.set(true);
+ showRegister(value: boolean): void{
+    this.registerMode.set(value);
   }
   
 
