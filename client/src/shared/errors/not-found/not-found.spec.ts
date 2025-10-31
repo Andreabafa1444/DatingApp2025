@@ -2,7 +2,6 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { NotFound } from './not-found';
 
-
 describe('NotFound', () => {
   let component: NotFound;
   let fixture: ComponentFixture<NotFound>;
