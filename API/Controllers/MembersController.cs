@@ -1,34 +1,42 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore; // 👈 importante para ToListAsync / FindAsync
+using Microsoft.EntityFrameworkCore; // importante para ToListAsync / FindAsync
 using API.Data;
 using API.Entities;
+using Microsoft.AspNetCore.Authorization;
+using API.Interfaces;
+
+
 
 namespace API.Controllers
 {
-    [Route("api/[controller]")] // localhost:5001/api/members
-    [ApiController]
-    public class MembersController : ControllerBase
-    {
-        private readonly AppDbContext _context;
+//[Authorize]
+//[AllowAnonymous]  // para pruebas pequeñas 
 
-        public MembersController(AppDbContext context)
-        {
-            _context = context;
-        }
+public class MembersController(IMembersRepository membersRepository) : BaseApiController
+    {
+        [AllowAnonymous]
+
 
         [HttpGet]
-        public async Task<ActionResult<IReadOnlyList<AppUser>>> GetMembers()
+        public async Task<ActionResult<IReadOnlyList<Member>>> GetMembers()
         {
-            var members = await _context.Users.ToListAsync();
-            return members;
-        }
+                    return Ok(await membersRepository.GetMembersAsync());
 
-        [HttpGet("{id}")] // localhost:5001/api/members/Bob-id
-        public async Task<ActionResult<AppUser>> GetMember(string id)
+
+        }
+        [AllowAnonymous]
+        [HttpGet("{id}")] // se pone un parametro en la ruta api/members/bob-id
+        public async Task<ActionResult<Member>> GetMember(string id)
         {
-            var member = await _context.Users.FirstOrDefaultAsync(u => u.Id == id);
+        var member = await membersRepository.GetMemberAsync(id);
             if (member == null) return NotFound();
             return member;
         }
+        
+    [HttpGet("{id}/photos")]
+    public async Task<ActionResult<IReadOnlyList<Photo>>> GetPhotos(string id)
+    {
+        return Ok(await membersRepository.GetPhotosAsync(id));
+    }
     }
 }
