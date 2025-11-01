@@ -1,12 +1,11 @@
+using System.Text;
 using API.Data;
 using API.Interfaces;
-using Microsoft.EntityFrameworkCore;
+using API.Middlewares;
 using API.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using API.Middlewares;
-
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -18,11 +17,12 @@ builder.Services.AddDbContext<AppDbContext>(opt =>
     opt.UseSqlite(builder.Configuration.GetConnectionString("SqliteConnection"));
 });
 builder.Services.AddCors();
-builder.Services.AddSingleton<ITokenService, TokenService>();
+builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var tokenKey = builder.Configuration["TokenKey"] ?? throw new ArgumentNullException("Cannot get TokenKey - program.cs ");
+        var tokenKey = builder.Configuration["TokenKey"]
+            ?? throw new ArgumentNullException("Cannot get the token key - Program.cs");
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuerSigningKey = true,
@@ -33,10 +33,8 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 var app = builder.Build();
-app.UseMiddleware<ExceptionMiddleware>();
-
-
 // Configure the HTTP request pipeline.
+app.UseMiddleware<ExceptionMiddleware>();
 app.UseCors(x => x.AllowAnyHeader()
     .AllowAnyMethod()
     .WithOrigins(
@@ -44,8 +42,21 @@ app.UseCors(x => x.AllowAnyHeader()
         "https://localhost:4200"
     ));
 app.UseAuthentication();
-app.UseAuthorization();   
-
+app.UseAuthorization();
 app.MapControllers();
 
+using var scope = app.Services.CreateScope();
+var services = scope.ServiceProvider;
+try
+{
+    var context = services.GetRequiredService<AppDbContext>();
+    await context.Database.MigrateAsync();
+    await Seed.SeedUsers(context);
+}
+catch (Exception ex)
+{
+    var logger = services.GetRequiredService<ILogger<Program>>();
+    logger.LogError(ex, "Migration process failed!");
+}
 app.Run();
+
