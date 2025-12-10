@@ -14,7 +14,6 @@ namespace API.Controllers
 
 public class MembersController(IMembersRepository membersRepository) : BaseApiController
     {
-        [AllowAnonymous]
 
 
         [HttpGet]
@@ -24,14 +23,15 @@ public class MembersController(IMembersRepository membersRepository) : BaseApiCo
 
 
         }
-        [AllowAnonymous]
-        [HttpGet("{id}")] // se pone un parametro en la ruta api/members/bob-id
-        public async Task<ActionResult<Member>> GetMember(string id)
-        {
-        var member = await membersRepository.GetMemberAsync(id);
-            if (member == null) return NotFound();
-            return member;
-        }
+  [HttpGet("{id}")] // se pone un parametro en la ruta api/members/bob-id
+    public async Task<ActionResult<Member>> GetMember(string id)
+    {
+        var member = await membersRepository.GetMemberAsync(id) ; //hace select de usuario
+
+        if (member == null) return NotFound();
+
+        return member;
+    }
         
     [HttpGet("{id}/photos")]
     public async Task<ActionResult<IReadOnlyList<Photo>>> GetPhotos(string id)
