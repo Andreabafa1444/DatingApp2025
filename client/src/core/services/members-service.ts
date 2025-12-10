@@ -4,7 +4,7 @@ import { environment } from '../../environments/environment';
 import { Member } from '../../types/memeber';
 import { Observable } from 'rxjs';
 import { AccountService } from './account-service';
-
+import { photo } from '../../types/memeber';
 @Injectable({
   providedIn: 'root'
 })
@@ -19,11 +19,7 @@ export class MembersService {
   getMembers(): Observable<Member[]> {
     return this.http.get<Member[]>(this.baseUrl + "members");  }
 
-  private getHttpOptions() {
-    return {
-      headers: new HttpHeaders({
-        Authorization: "Bearer " + this.accountService.currentUser()?.token
-      })
-    };
+ getPhotos(id:string){
+    return this.http.get<photo[]>(`${this.baseUrl}members/${id}/photos`);
   }
 }
